@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"os/exec"
 )
 
 func main() {
@@ -31,6 +30,7 @@ func main() {
 				fmt.Println()
 			}
 		} else if command[0] == "type" {
+
 			if len(command) == 1 {
 				fmt.Print()
 			} else {
@@ -38,11 +38,32 @@ func main() {
 					if command[i] == "echo" || command[i] == "exit" || command[i] == "type" {
 						fmt.Println(command[i] + " is a shell builtin")
 					} else {
-						execPath, error := exec.LookPath(command[i])
-						if error == nil {
-							fmt.Printf("%s is %s\n", command[i], execPath)
-						} else {
-						fmt.Println(command[i] + ": not found")
+						foundExec := false
+						path := os.Getenv("PATH")
+						pathSlice := strings.Split(path, ":")
+						var fullPath string
+
+						for j := 0; j < len(pathSlice); j++ {
+
+							if pathSlice[j][len(pathSlice[j])-1] != '/' {
+								fullPath = pathSlice[j] + "/" + command[i]
+							} else {
+								fullPath = pathSlice[j] + command[i]
+							}
+
+							fileInfo, error := os.Stat(fullPath)
+							if error == nil {
+								mode := fileInfo.Mode()
+								if mode&0b001001001 != 0 { // mode is stored as rwxrwxrwx
+									fmt.Printf("%s is %s\n", command[i], fullPath)
+									foundExec = true
+									break
+								}
+							}
+
+						}
+						if !foundExec {
+							fmt.Println(command[i] + ": not found")
 						}
 					}
 				}
