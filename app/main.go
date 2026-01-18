@@ -5,7 +5,31 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"os/exec"
 )
+
+func findExec(program string) (bool, string) {
+	path := os.Getenv("PATH")
+	pathSlice := strings.Split(path, ":")
+	var fullPath string
+
+	for j := 0; j < len(pathSlice); j++ {
+		if pathSlice[j][len(pathSlice[j])-1] != '/' {
+			fullPath = pathSlice[j] + "/" + program
+		} else {
+			fullPath = pathSlice[j] + program
+		}
+
+		fileInfo, error := os.Stat(fullPath)
+		if error == nil {
+			mode := fileInfo.Mode()
+			if mode&0b001001001 != 0 { // mode is stored as rwxrwxrwx
+				return true, fullPath
+			}
+		}
+	}
+	return false, ""
+}
 
 func main() {
 	for {
@@ -30,7 +54,6 @@ func main() {
 				fmt.Println()
 			}
 		} else if command[0] == "type" {
-
 			if len(command) == 1 {
 				fmt.Print()
 			} else {
@@ -38,35 +61,22 @@ func main() {
 					if command[i] == "echo" || command[i] == "exit" || command[i] == "type" {
 						fmt.Println(command[i] + " is a shell builtin")
 					} else {
-						foundExec := false
-						path := os.Getenv("PATH")
-						pathSlice := strings.Split(path, ":")
-						var fullPath string
-
-						for j := 0; j < len(pathSlice); j++ {
-
-							if pathSlice[j][len(pathSlice[j])-1] != '/' {
-								fullPath = pathSlice[j] + "/" + command[i]
-							} else {
-								fullPath = pathSlice[j] + command[i]
-							}
-
-							fileInfo, error := os.Stat(fullPath)
-							if error == nil {
-								mode := fileInfo.Mode()
-								if mode&0b001001001 != 0 { // mode is stored as rwxrwxrwx
-									fmt.Printf("%s is %s\n", command[i], fullPath)
-									foundExec = true
-									break
-								}
-							}
-
-						}
-						if !foundExec {
+						foundExec, fullPath := findExec(command[i])
+						if foundExec {
+							fmt.Printf("%s is %s\n", command[i], fullPath)
+						} else {
 							fmt.Println(command[i] + ": not found")
 						}
 					}
 				}
+			}
+		} else if foundExec, fullPath := findExec(command[0]); foundExec {
+			cmd := exec.Command(command[0], command[1:]...)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			error := cmd.Run()
+			if error != nil {
+				fmt.Printf("Something went wrong! Could not execute %s\n", fullPath)
 			}
 		} else {
 			fmt.Println(command[0] + ": command not found")
