@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"os/exec"
 )
 
 func main() {
@@ -37,7 +38,12 @@ func main() {
 					if command[i] == "echo" || command[i] == "exit" || command[i] == "type" {
 						fmt.Println(command[i] + " is a shell builtin")
 					} else {
+						execPath, error := exec.LookPath(command[i])
+						if error == nil {
+							fmt.Printf("%s is %s\n", command[i], execPath)
+						} else {
 						fmt.Println(command[i] + ": not found")
+						}
 					}
 				}
 			}
