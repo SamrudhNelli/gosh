@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"os/exec"
+	"log"
 )
 
 func findExec(program string) (bool, string) {
@@ -38,8 +39,7 @@ func main() {
 		command := strings.Fields(rawCommand)
 
 		if error != nil {
-			fmt.Fprintln(os.Stderr, "Error reading input:", error)
-			os.Exit(1)
+			log.Fatal(error)
 		}
 
 		if command[0] == "exit" {
@@ -58,7 +58,7 @@ func main() {
 				fmt.Print()
 			} else {
 				for i := 1; i < len(command); i++ {
-					if command[i] == "echo" || command[i] == "exit" || command[i] == "type" {
+					if command[i] == "echo" || command[i] == "exit" || command[i] == "type" || command[i] == "pwd" {
 						fmt.Println(command[i] + " is a shell builtin")
 					} else {
 						foundExec, fullPath := findExec(command[i])
@@ -70,6 +70,12 @@ func main() {
 					}
 				}
 			}
+		} else if command[0] == "pwd" {
+			path, error := os.Getwd()
+			if error != nil {
+				log.Fatal(error)
+			}
+			fmt.Println(path)
 		} else if foundExec, fullPath := findExec(command[0]); foundExec {
 			cmd := exec.Command(command[0], command[1:]...)
 			cmd.Stdout = os.Stdout
@@ -77,6 +83,7 @@ func main() {
 			error := cmd.Run()
 			if error != nil {
 				fmt.Printf("Something went wrong! Could not execute %s\n", fullPath)
+				log.Fatal(error)
 			}
 		} else {
 			fmt.Println(command[0] + ": command not found")
