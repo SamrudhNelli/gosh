@@ -11,14 +11,22 @@ import (
 )
 
 func Echo(command []string) (print string) {
+	size, flag := checkRedirectRequest(command)
+	if size == -1 {
+		size = len(command) 
+	}
 
-	if len(command) == 1 {
+	if size == 1 {
 		print = "\n"
 	} else {
-		for i := 1; i < len(command); i++ {
+		for i := 1; i < size; i++ {
 			print += fmt.Sprintf(command[i] + " ")
 		}
 		print += "\n"
+	}
+	if flag {
+		redirectToFile(command, size, print)
+		return ""
 	}
 	return
 }
@@ -149,10 +157,40 @@ func redirectToFile(command []string, index int, print string) () {
 	data := []byte(print + strings.Join(command[min(index + 2, len(command)):], " "))
 	error := os.WriteFile(command[index + 1], data, 0644)
 	if error != nil {
-		_, fullPath := findExec(command[0])
-		fmt.Printf("Something went wrong! Could not execute %s\n", fullPath)
 		log.Fatal(error)
 	}
+	return
+}
+
+func commandParser(rawCommand string) (command []string) {
+	var startingQuote byte
+	var temp string = ""
+	var insideWord bool = false
+	for i := 0; i < len(rawCommand); i++ {
+		if insideWord {
+			if rawCommand[i] == startingQuote {
+				insideWord = false
+			} else {
+				temp += string(rawCommand[i])
+			}
+		} else {
+			if rawCommand[i] == '\'' || rawCommand[i] == '"' {
+				startingQuote = rawCommand[i]
+				insideWord = true
+			} else if rawCommand[i] == ' ' || rawCommand[i] == '\n' || rawCommand[i] == '\t' || rawCommand[i] == '\r' || rawCommand[i] == '\f' || rawCommand[i] == '\v' {
+				if temp != "" {
+					command = append(command, temp)
+					temp = ""
+				}
+			} else {
+				temp += string(rawCommand[i])
+			}
+		}
+	}
+	if temp != "" {
+		command = append(command, temp)
+	}
+	return
 }
 
 
@@ -160,7 +198,7 @@ func main() {
 	for {
 		fmt.Print("$ ")
 		rawCommand, error := bufio.NewReader(os.Stdin).ReadString('\n')
-		command := strings.Fields(rawCommand)
+		command := commandParser(rawCommand)
 
 		if error != nil {
 			log.Fatal(error)
