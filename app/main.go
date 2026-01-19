@@ -7,6 +7,7 @@ import (
 	"strings"
 	"os/exec"
 	"log"
+	"slices"
 )
 
 func Echo(command []string) (print string) {
@@ -103,10 +104,50 @@ func isExec(command []string) (bool) {
 }
 
 func runExec(command []string) {
-	cmd := exec.Command(command[0], command[1:]...)
-	cmd.Stdout = os.Stdout
+	index, flag := checkRedirectRequest(command)
+	var cmd *exec.Cmd
+
+	if flag {
+		outFile, error := os.Create(command[index + 1])
+		if error != nil {
+			log.Fatal(error)
+		}
+		defer outFile.Close()
+		cmd = exec.Command(command[0], command[1:index]...)
+		cmd.Stdout = outFile
+	} else {
+		cmd = exec.Command(command[0], command[1:]...)
+		cmd.Stdout = os.Stdout
+	}
+
 	cmd.Stderr = os.Stderr
 	error := cmd.Run()
+	// if error != nil {
+	// 	// _, fullPath := findExec(command[0])
+	// 	// fmt.Printf("Something went wrong! Could not execute %s\n", fullPath)
+	// 	// log.Fatal(error)
+	// }
+	var _ = error
+}
+
+func checkRedirectRequest(command []string) (int, bool) {
+	index := slices.IndexFunc(command, func(c string) bool {
+		return c == "1>" || c == ">"
+	})
+	if index == -1 {
+		return index, false
+	} else {
+		return index, true
+	}
+}
+
+func redirectToFile(command []string, index int, print string) () {
+	if len(command) == index + 1 {
+		fmt.Println("No output file specified!!")
+		return
+	}
+	data := []byte(print + strings.Join(command[min(index + 2, len(command)):], " "))
+	error := os.WriteFile(command[index + 1], data, 0644)
 	if error != nil {
 		_, fullPath := findExec(command[0])
 		fmt.Printf("Something went wrong! Could not execute %s\n", fullPath)
@@ -123,6 +164,10 @@ func main() {
 
 		if error != nil {
 			log.Fatal(error)
+		}
+
+		if len(command) == 0 {
+			continue
 		}
 
 		if command[0] == "exit" {
