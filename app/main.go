@@ -17,6 +17,18 @@ var completer = readline.NewPrefixCompleter(
 	readline.PcItem("exit"),
 )
 
+type bellCompleter struct {
+	readline.AutoCompleter
+}
+
+func (bc *bellCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
+	newLine, length = bc.AutoCompleter.Do(line, pos)
+	if len(newLine) == 0 {
+		fmt.Print("\x07")
+	}
+	return newLine, length
+}
+
 func Echo(command []string) (print string) {
 	size, flag := checkRedirectRequest(command)
 	if size == -1 {
@@ -274,9 +286,12 @@ func commandParser(rawCommand string) (command []string) {
 
 func main() {
 
+	customCompleter := &bellCompleter {
+		AutoCompleter: completer,
+	}
 	rl, error := readline.NewEx(&readline.Config{
 		Prompt:          "$ ",
-		AutoComplete:    completer,
+		AutoComplete:    customCompleter,
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
 	})
