@@ -24,9 +24,9 @@ func Echo(command []string) (print string) {
 		}
 		print += "\n"
 	}
-	if flag {
-		redirectToFile(command, size, print)
-		return ""
+	if flag != -1 {
+		print := redirectEchoToFile(command, size, print, flag)
+		return print
 	}
 	return
 }
@@ -111,11 +111,11 @@ func isExec(command []string) (bool) {
 	return foundExec
 }
 
-func runExec(command []string) {
+func RunExec(command []string) {
 	index, flag := checkRedirectRequest(command)
 	var cmd *exec.Cmd
 
-	if flag {
+	if flag == 1 {
 		outFile, error := os.Create(command[index + 1])
 		if error != nil {
 			log.Fatal(error)
@@ -123,12 +123,22 @@ func runExec(command []string) {
 		defer outFile.Close()
 		cmd = exec.Command(command[0], command[1:index]...)
 		cmd.Stdout = outFile
+		cmd.Stderr = os.Stderr
+	} else if flag == 2 {
+		outFile, error := os.Create(command[index + 1])
+		if error != nil {
+			log.Fatal(error)
+		}
+		defer outFile.Close()
+		cmd = exec.Command(command[0], command[1:index]...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = outFile
 	} else {
 		cmd = exec.Command(command[0], command[1:]...)
 		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 	}
 
-	cmd.Stderr = os.Stderr
 	error := cmd.Run()
 	// if error != nil {
 	// 	// _, fullPath := findExec(command[0])
@@ -138,28 +148,43 @@ func runExec(command []string) {
 	var _ = error
 }
 
-func checkRedirectRequest(command []string) (int, bool) {
+func checkRedirectRequest(command []string) (int, int) {
 	index := slices.IndexFunc(command, func(c string) bool {
-		return c == "1>" || c == ">"
+		return c == "1>" || c == ">" || c == "2>"
 	})
 	if index == -1 {
-		return index, false
+		return index, -1
+	} else if command[index] == "2>" {
+		return index, 2
 	} else {
-		return index, true
+		return index, 1
 	}
 }
 
-func redirectToFile(command []string, index int, print string) () {
-	if len(command) == index + 1 {
-		fmt.Println("No output file specified!!")
-		return
+func redirectEchoToFile(command []string, index int, print string, flag int) (string) {
+	if flag == 1 {
+		if len(command) == index + 1 {
+			fmt.Println("No output file specified!!")
+			return ""
+		}
+		data := []byte(print + strings.Join(command[min(index + 2, len(command)):], " "))
+		error := os.WriteFile(command[index + 1], data, 0644)
+		if error != nil {
+			log.Fatal(error)
+		}
+	} else {
+		if len(command) == index + 1 {
+			fmt.Println("No output file specified!!")
+			return ""
+		}
+		data := []byte("")
+		error := os.WriteFile(command[index + 1], data, 0644)
+		if error != nil {
+			log.Fatal(error)
+		}
+		return print
 	}
-	data := []byte(print + strings.Join(command[min(index + 2, len(command)):], " "))
-	error := os.WriteFile(command[index + 1], data, 0644)
-	if error != nil {
-		log.Fatal(error)
-	}
-	return
+	return ""
 }
 
 func commandParser(rawCommand string) (command []string) {
@@ -219,7 +244,7 @@ func main() {
 		} else if command[0] == "cd" {
 			fmt.Print(Cd(command))
 		} else if isExec(command) {
-			runExec(command)
+			RunExec(command)
 		} else {
 			fmt.Println(command[0] + ": command not found")
 		}
