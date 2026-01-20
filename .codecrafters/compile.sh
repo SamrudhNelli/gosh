@@ -8,4 +8,4 @@
 
 set -e # Exit on failure
 
-go build -o /tmp/codecrafters-build-shell-go app/*.go
+go build -mod=vendor -o /tmp/codecrafters-build-shell-go app/*.go

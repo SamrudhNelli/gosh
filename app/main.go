@@ -1,19 +1,26 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"os"
-	"strings"
-	"os/exec"
+	"io"
 	"log"
+	"os"
+	"os/exec"
 	"slices"
+	"strings"
+
+	"github.com/chzyer/readline"
+)
+
+var completer = readline.NewPrefixCompleter(
+	readline.PcItem("echo"),
+	readline.PcItem("exit"),
 )
 
 func Echo(command []string) (print string) {
 	size, flag := checkRedirectRequest(command)
 	if size == -1 {
-		size = len(command) 
+		size = len(command)
 	}
 
 	if size == 1 {
@@ -51,7 +58,7 @@ func Type(command []string) (print string) {
 	return
 }
 
-func Pwd() (string) {
+func Pwd() string {
 	path, error := os.Getwd()
 	if error != nil {
 		log.Fatal(error)
@@ -59,7 +66,7 @@ func Pwd() (string) {
 	return fmt.Sprintf("%s\n", path)
 }
 
-func Cd(command []string) (string) {
+func Cd(command []string) string {
 	if len(command) == 1 || command[1] == "~" {
 		home, error := os.UserHomeDir()
 		if error != nil {
@@ -106,7 +113,7 @@ func findExec(program string) (bool, string) {
 	return false, ""
 }
 
-func isExec(command []string) (bool) {
+func isExec(command []string) bool {
 	foundExec, _ := findExec(command[0])
 	return foundExec
 }
@@ -115,7 +122,7 @@ func returnExec(command []string) (cmd *exec.Cmd, outFile *os.File) {
 	index, flag := checkRedirectRequest(command)
 	var error error
 	if flag == 1 {
-		outFile, error = os.Create(command[index + 1])
+		outFile, error = os.Create(command[index+1])
 		if error != nil {
 			log.Fatal(error)
 		}
@@ -123,7 +130,7 @@ func returnExec(command []string) (cmd *exec.Cmd, outFile *os.File) {
 		cmd.Stdout = outFile
 		cmd.Stderr = os.Stderr
 	} else if flag == 2 {
-		outFile, error = os.Create(command[index + 1])
+		outFile, error = os.Create(command[index+1])
 		if error != nil {
 			log.Fatal(error)
 		}
@@ -131,7 +138,7 @@ func returnExec(command []string) (cmd *exec.Cmd, outFile *os.File) {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = outFile
 	} else if flag == 3 {
-		outFile, error = os.OpenFile(command[index + 1], os.O_APPEND | os.O_CREATE | os.O_WRONLY, 0644)
+		outFile, error = os.OpenFile(command[index+1], os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if error != nil {
 			log.Fatal(error)
 		}
@@ -139,7 +146,7 @@ func returnExec(command []string) (cmd *exec.Cmd, outFile *os.File) {
 		cmd.Stdout = outFile
 		cmd.Stderr = os.Stderr
 	} else if flag == 4 {
-		outFile, error = os.OpenFile(command[index + 1], os.O_APPEND | os.O_CREATE | os.O_WRONLY, 0644)
+		outFile, error = os.OpenFile(command[index+1], os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if error != nil {
 			log.Fatal(error)
 		}
@@ -186,28 +193,28 @@ func checkRedirectRequest(command []string) (int, int) {
 	}
 }
 
-func redirectEchoToFile(command []string, index int, print string, flag int) (string) {
-	if len(command) == index + 1 {
+func redirectEchoToFile(command []string, index int, print string, flag int) string {
+	if len(command) == index+1 {
 		fmt.Println("No output file specified!!")
 		return ""
 	}
 
 	if flag == 1 {
-		data := []byte(print + strings.Join(command[min(index + 2, len(command)):], " "))
-		error := os.WriteFile(command[index + 1], data, 0644)
+		data := []byte(print + strings.Join(command[min(index+2, len(command)):], " "))
+		error := os.WriteFile(command[index+1], data, 0644)
 		if error != nil {
 			log.Fatal(error)
 		}
 	} else if flag == 2 {
 		data := []byte("")
-		error := os.WriteFile(command[index + 1], data, 0644)
+		error := os.WriteFile(command[index+1], data, 0644)
 		if error != nil {
 			log.Fatal(error)
 		}
 		return print
 	} else if flag == 3 {
-		data := []byte(print + strings.Join(command[min(index + 2, len(command)):], " "))
-		file, error := os.OpenFile(command[index + 1], os.O_APPEND | os.O_CREATE | os.O_WRONLY, 0644)
+		data := []byte(print + strings.Join(command[min(index+2, len(command)):], " "))
+		file, error := os.OpenFile(command[index+1], os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if error != nil {
 			log.Fatal(error)
 		}
@@ -219,7 +226,7 @@ func redirectEchoToFile(command []string, index int, print string, flag int) (st
 		}
 	} else if flag == 4 {
 		data := []byte("")
-		file, error := os.OpenFile(command[index + 1], os.O_APPEND | os.O_CREATE | os.O_WRONLY, 0644)
+		file, error := os.OpenFile(command[index+1], os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if error != nil {
 			log.Fatal(error)
 		}
@@ -265,16 +272,35 @@ func commandParser(rawCommand string) (command []string) {
 	return
 }
 
-
 func main() {
-	for {
-		fmt.Print("$ ")
-		rawCommand, error := bufio.NewReader(os.Stdin).ReadString('\n')
-		command := commandParser(rawCommand)
 
-		if error != nil {
-			log.Fatal(error)
+	rl, error := readline.NewEx(&readline.Config{
+		Prompt:          "$ ",
+		AutoComplete:    completer,
+		InterruptPrompt: "^C",
+		EOFPrompt:       "exit",
+	})
+	if error != nil {
+		log.Fatal(error)
+	}
+	defer rl.Close()
+
+	for {
+
+		rawCommand, error := rl.Readline()
+		if error == readline.ErrInterrupt { // Ctrl + C
+			if len(rawCommand) == 0 {
+				break
+			} else {
+				continue
+			}
+		} else if error == io.EOF { // Ctrl + D and other errors
+			break
+		} else if error != nil { // Other rare errors! Something broke!!
+			break
 		}
+
+		command := commandParser(rawCommand)
 
 		if len(command) == 0 {
 			continue
