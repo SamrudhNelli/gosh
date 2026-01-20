@@ -12,13 +12,39 @@ import (
 	"github.com/chzyer/readline"
 )
 
-var completer = readline.NewPrefixCompleter(
-	readline.PcItem("echo"),
-	readline.PcItem("exit"),
-)
+var builtins = []string{"echo", "exit", "pwd", "type", "cd"}
+
 
 type bellCompleter struct {
 	readline.AutoCompleter
+}
+
+func initCompleters() ([]readline.PrefixCompleterInterface) {
+	options := make([]readline.PrefixCompleterInterface, 0, 5000)
+	for i := 0; i < len(builtins); i++ {
+		options = append(options, readline.PcItem(builtins[i]))
+	}
+	path := os.Getenv("PATH")
+	pathSlice := strings.Split(path, ":")
+	for i := 0; i < len(pathSlice); i++ {
+		entries, error := os.ReadDir(pathSlice[i])
+		if error != nil {
+			continue
+		}
+		for j := 0; j < len(entries); j++ {
+			if entries[j].IsDir() {
+				continue
+			}
+			fileInfo, error := entries[j].Info()
+			if error != nil {
+				continue
+			}
+			if fileInfo.Mode() & 0111 != 0 {
+				options = append(options, readline.PcItem(entries[j].Name()))
+        	}
+		}
+	}
+	return options
 }
 
 func (bc *bellCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
@@ -286,6 +312,7 @@ func commandParser(rawCommand string) (command []string) {
 
 func main() {
 
+	completer := readline.NewPrefixCompleter(initCompleters()...)
 	customCompleter := &bellCompleter {
 		AutoCompleter: completer,
 	}
