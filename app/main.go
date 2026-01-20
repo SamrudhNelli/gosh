@@ -229,6 +229,7 @@ func redirectEchoToFile(command []string, index int, print string, flag int) (st
 			file.Close()
 			log.Fatal(error)
 		}
+		return print
 	}
 	return ""
 }
