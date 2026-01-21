@@ -8,21 +8,23 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/chzyer/readline"
 )
 
 var builtins = []string{"echo", "exit", "pwd", "type", "cd"}
 
-
 type bellCompleter struct {
 	readline.AutoCompleter
+	lastTabTime    time.Time
+	secondTabPress bool
 }
 
-func initCompleters() ([]readline.PrefixCompleterInterface) {
-	options := make([]readline.PrefixCompleterInterface, 0, 5000)
+func initCompleters() []readline.PrefixCompleterInterface {
+	uniqueStrings := make(map[string]bool, 5000)
 	for i := 0; i < len(builtins); i++ {
-		options = append(options, readline.PcItem(builtins[i]))
+		uniqueStrings[builtins[i]] = true
 	}
 	path := os.Getenv("PATH")
 	pathSlice := strings.Split(path, ":")
@@ -32,17 +34,26 @@ func initCompleters() ([]readline.PrefixCompleterInterface) {
 			continue
 		}
 		for j := 0; j < len(entries); j++ {
-			if entries[j].IsDir() {
+			if entries[j].IsDir() || uniqueStrings[entries[j].Name()] {
 				continue
 			}
 			fileInfo, error := entries[j].Info()
 			if error != nil {
 				continue
 			}
-			if fileInfo.Mode() & 0111 != 0 {
-				options = append(options, readline.PcItem(entries[j].Name()))
-        	}
+			if fileInfo.Mode()&0111 != 0 {
+				uniqueStrings[entries[j].Name()] = true
+			}
 		}
+	}
+	sortedStrings := make([]string, 0, len(uniqueStrings))
+	for str, _ := range uniqueStrings {
+		sortedStrings = append(sortedStrings, str)
+	}
+	slices.Sort(sortedStrings)
+	options := make([]readline.PrefixCompleterInterface, 0, len(sortedStrings))
+	for _, str := range sortedStrings {
+		options = append(options, readline.PcItem(str))
 	}
 	return options
 }
@@ -51,8 +62,45 @@ func (bc *bellCompleter) Do(line []rune, pos int) (newLine [][]rune, length int)
 	newLine, length = bc.AutoCompleter.Do(line, pos)
 	if len(newLine) == 0 {
 		fmt.Print("\x07")
+		return newLine, length
+	} else if len(newLine) == 1 {
+		return newLine, length
 	}
-	return newLine, length
+
+	longestCommonPrefix := newLine[0]
+	for _, val := range newLine[1:] {
+		minLen := min(len(longestCommonPrefix), len(val))
+		i := 0
+		for ; i < minLen; i++ {
+			if longestCommonPrefix[i] != val[i] {
+				break
+			}
+		}
+		longestCommonPrefix = longestCommonPrefix[:i]
+	}
+	if len(longestCommonPrefix) > 0 {
+		return [][]rune{longestCommonPrefix}, length
+	}
+
+	curTime := time.Now()
+	if bc.secondTabPress && curTime.Sub(bc.lastTabTime) < 5*time.Second {
+		fmt.Println("")
+		for i, _ := range newLine {
+			fullString := string(line) + string(newLine[i])
+			fmt.Print(fullString)
+			if i < len(newLine)-1 {
+				fmt.Print(" ")
+			}
+		}
+		fmt.Print("\n")
+		fmt.Printf("$ %s", string(line))
+		bc.secondTabPress = false
+		return nil, length
+	}
+	bc.lastTabTime = curTime
+	bc.secondTabPress = true
+	fmt.Print("\x07")
+	return nil, length
 }
 
 func Echo(command []string) (print string) {
@@ -313,7 +361,7 @@ func commandParser(rawCommand string) (command []string) {
 func main() {
 
 	completer := readline.NewPrefixCompleter(initCompleters()...)
-	customCompleter := &bellCompleter {
+	customCompleter := &bellCompleter{
 		AutoCompleter: completer,
 	}
 	rl, error := readline.NewEx(&readline.Config{
