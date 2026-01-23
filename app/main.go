@@ -9,11 +9,18 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"sync"
 
 	"github.com/chzyer/readline"
 )
 
-var builtins = []string{"echo", "exit", "pwd", "type", "cd"}
+var builtin = map[string]bool{
+	"echo" : true,
+	"exit" : true, 
+	"pwd" : true, 
+	"type" : true, 
+	"cd" : true,
+}
 
 type bellCompleter struct {
 	readline.AutoCompleter
@@ -23,8 +30,10 @@ type bellCompleter struct {
 
 func initCompleters() []readline.PrefixCompleterInterface {
 	uniqueStrings := make(map[string]bool, 5000)
-	for i := 0; i < len(builtins); i++ {
-		uniqueStrings[builtins[i]] = true
+	for key, val := range builtin {
+		if val {
+			uniqueStrings[key] = true
+		}
 	}
 	path := os.Getenv("PATH")
 	pathSlice := strings.Split(path, ":")
@@ -112,9 +121,7 @@ func Echo(command []string) (print string) {
 	if size == 1 {
 		print = "\n"
 	} else {
-		for i := 1; i < size; i++ {
-			print += fmt.Sprintf(command[i] + " ")
-		}
+		print = strings.Join(command[1:size], " ")
 		print += "\n"
 	}
 	if flag != -1 {
@@ -129,7 +136,7 @@ func Type(command []string) (print string) {
 		print = ""
 	} else {
 		for i := 1; i < len(command); i++ {
-			if command[i] == "echo" || command[i] == "exit" || command[i] == "type" || command[i] == "pwd" {
+			if builtin[command[i]] {
 				print += fmt.Sprintf("%s is a shell builtin\n", command[i])
 			} else {
 				foundExec, fullPath := findExec(command[i])
@@ -360,23 +367,79 @@ func commandParser(rawCommand string) (command []string) {
 
 func ExecutePipes(command []string) {
 	commands := splitPipes(command)
-	c1 := exec.Command(commands[0][0], commands[0][1:]...)
-	c2 := exec.Command(commands[1][0], commands[1][1:]...)
-	r, w, err := os.Pipe()
-	if err != nil {
-		log.Fatal(err)
+	var cmds []*exec.Cmd
+	var prevPipeReader *os.File = nil
+	var wg sync.WaitGroup
+
+	for idx, val := range commands {
+		var currPipeReader *os.File = nil
+        var currPipeWriter *os.File = nil
+		if idx < len(commands) - 1 {
+            r, w, err := os.Pipe()
+			if err != nil {
+				log.Fatal(err)
+			}
+            currPipeReader = r
+            currPipeWriter = w
+        }
+		shouldCloseWriter := false
+
+		if builtin[val[0]] {
+			wg.Add(1)
+			go func(v []string, w *os.File) {
+				defer wg.Done()
+				builtinInPipe(v, w)
+			}(val, currPipeWriter)
+		} else {
+			cmd := exec.Command(val[0], val[1:]...)
+
+			if prevPipeReader != nil {
+				cmd.Stdin = prevPipeReader
+			} else {
+				cmd.Stdin = os.Stdin
+			}
+			if currPipeWriter != nil {
+				cmd.Stdout = currPipeWriter
+				shouldCloseWriter = true
+			} else {
+				cmd.Stdout = os.Stdout
+			}
+			cmd.Stderr = os.Stderr
+			cmd.Start()
+			cmds = append(cmds, cmd)
+		}
+
+		if shouldCloseWriter && currPipeWriter != nil {
+			currPipeWriter.Close()
+		}
+		if prevPipeReader != nil {
+			prevPipeReader.Close()
+		}        
+		prevPipeReader = currPipeReader
 	}
-	c1.Stdin = os.Stdin
-	c2.Stderr = os.Stderr
-	c1.Stderr = os.Stderr
-	c2.Stdout = os.Stdout
-	c1.Stdout = w
-	c2.Stdin = r
-	c1.Start()
-	c2.Start()
-	c1.Wait()
-	w.Close()
-	c2.Wait()
+
+	for _, cmd := range cmds {
+		cmd.Wait()
+	}
+	wg.Wait()
+}
+
+func builtinInPipe(command []string, out *os.File) {
+	var cmdOutput string
+	switch command[0] {
+	case "echo" : cmdOutput = Echo(command)
+	case "pwd" : cmdOutput = Pwd()
+	case "cd" : cmdOutput = Cd(command)
+	case "type" : cmdOutput = Type(command)
+	default : log.Fatal("Internal builtin code broken!")
+	}
+
+	if out != nil {
+		out.WriteString(cmdOutput)
+		out.Close()
+	} else {
+		fmt.Print(cmdOutput)
+	}
 }
 
 func splitPipes(command []string) (commands [][]string) {
@@ -389,7 +452,9 @@ func splitPipes(command []string) (commands [][]string) {
 			commandSet = append(commandSet, val)
 		}
 	}
-	commands = append(commands, commandSet)
+	if commandSet != nil {
+		commands = append(commands, commandSet)
+	}
 	return
 }
 
@@ -440,10 +505,10 @@ func main() {
 			continue
 		}
 
-		if hasPipelines(command) {
-			ExecutePipes(command)
-		} else if command[0] == "exit" {
+		if command[0] == "exit" {
 			break
+		} else if hasPipelines(command) {
+			ExecutePipes(command) 
 		} else if command[0] == "echo" {
 			fmt.Print(Echo(command))
 		} else if command[0] == "type" {
