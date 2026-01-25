@@ -20,6 +20,7 @@ var builtin = map[string]bool{
 	"pwd" : true, 
 	"type" : true, 
 	"cd" : true,
+	"history" : true,
 }
 
 type bellCompleter struct {
@@ -181,6 +182,29 @@ func Cd(command []string) string {
 		}
 	}
 	return ""
+}
+
+func History() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Print("Error accessing home directory! : ")
+		log.Fatal(err)
+	}
+	historyPath := homeDir + "/.gosh_history"
+	content, err := os.ReadFile(historyPath)
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(content), "\n")
+	var output strings.Builder
+
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
+		fmt.Fprintf(&output, "%d  %s\n", i+1, line)
+	}
+	return output.String()
 }
 
 func findExec(program string) (bool, string) {
@@ -431,6 +455,7 @@ func builtinInPipe(command []string, out *os.File) {
 	case "pwd" : cmdOutput = Pwd()
 	case "cd" : cmdOutput = Cd(command)
 	case "type" : cmdOutput = Type(command)
+	case "history" : cmdOutput = History()
 	default : log.Fatal("Internal builtin code broken!")
 	}
 
@@ -467,17 +492,41 @@ func hasPipelines(command []string) bool {
 	return false
 }
 
+func Welcome() {
+	cyan := "\033[36m"
+    white := "\033[97m"
+    reset := "\033[0m"
+
+    fmt.Println(cyan + "\n                  .oooooo.      .oooooo.            oooo")
+    fmt.Println("                 d8P'  `Y8b    d8P'  `Y8b           `888")
+    fmt.Println("                888           888      888  .oooo.o  888 .oo.")
+    fmt.Println("                888           888      888 d88(  \"8  888P\"Y88b")
+    fmt.Println("                888     ooooo 888      888 `\"Y88b.   888   888")
+    fmt.Println("                `88.    .88'  `88b    d88' o.  )88b  888   888")
+    fmt.Println("                 `Y8bood8P'    `Y8bood8P'  8\"\"888P' o888o o888o" + reset)
+    
+    fmt.Println(white + "\n                           v1.0 (The Go Shell)\n" + reset)
+    fmt.Println()
+}
+
 func main() {
 
+	home, _ := os.UserHomeDir()
+	historyPath := home + "/.gosh_history"
 	completer := readline.NewPrefixCompleter(initCompleters()...)
 	customCompleter := &bellCompleter{
 		AutoCompleter: completer,
 	}
+
+	// Welcome()
+
 	rl, err := readline.NewEx(&readline.Config{
-		Prompt:          "$ ",
-		AutoComplete:    customCompleter,
-		InterruptPrompt: "^C",
-		EOFPrompt:       "exit",
+		Prompt:            "$ ",
+		HistoryFile:       historyPath,
+		AutoComplete:      customCompleter,
+		InterruptPrompt:   "^C",
+		EOFPrompt:         "exit",
+		HistorySearchFold: true,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -517,6 +566,8 @@ func main() {
 			fmt.Print(Pwd())
 		} else if command[0] == "cd" {
 			fmt.Print(Cd(command))
+		} else if command[0] == "history" {
+			fmt.Println(History())
 		} else if isExec(command) {
 			RunExec(command)
 		} else {

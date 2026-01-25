@@ -1,34 +1,42 @@
-[![progress-banner](https://backend.codecrafters.io/progress/shell/22d0fcf4-7703-4886-bc42-e49e909c6cc2)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
+# Gosh (The Go Shell)
 
-This is a starting point for Go solutions to the
-["Build Your Own Shell" Challenge](https://app.codecrafters.io/courses/shell/overview).
+A lightweight, custom command-line shell written in **Go**. It supports pipelines, autocompletion, persistent history, and custom built-in commands.
 
-In this challenge, you'll build your own POSIX compliant shell that's capable of
-interpreting shell commands, running external programs and builtin commands like
-cd, pwd, echo and more. Along the way, you'll learn about shell command parsing,
-REPLs, builtin commands, and more.
+```text
+                              .oooooo.      .oooooo.            oooo
+                           d8P'  `Y8b    d8P'  `Y8b           `888
+                           888           888      888  .oooo.o  888 .oo.
+                           888           888      888 d88(  "8  888P"Y88b
+                           888     ooooo 888      888 `"Y88b.   888   888
+                           `88.    .88'  `88b    d88' o.  )88b  888   888
+                           `Y8bood8P'    `Y8bood8P'  8""888P' o888o o888o
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
-
-# Passing the first stage
-
-The entry point for your `shell` implementation is in `app/main.go`. Study and
-uncomment the relevant code, and push your changes to pass the first stage:
-
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
+                                       v1.0 (The Go Shell)
 ```
 
-Time to move on to the next stage!
+### Features
 
-# Stage 2 & beyond
+* Supports both builitins and executables
+* Lightweight shell that runs smoothly on slower systems
+* Pipelining support using `|` operator
+* Redirection support using `1>`, `2>`, `1>>`, `2>>`
+* Tab autocompletion support using the capable [readline](https://github.com/chzyer/readline) library. 
 
-Note: This section is for stages 2 and beyond.
+### Built-in Commands
 
-1. Ensure you have `go (1.25)` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `app/main.go`.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
+[ `echo`, `exit`, `pwd`, `type`, `cd`, `history` ]
+
+### Installation
+
+Will be added soon!!
+
+### Configuration
+
+The shell history is stored in your home directory:
+`~/.gosh_history`
+
+Support for appearance customization will be available soon.
+
+### Contributing
+
+Feel free to fork this project and submit pull requests. Suggestions for new built-ins are welcome!
