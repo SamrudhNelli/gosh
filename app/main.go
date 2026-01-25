@@ -567,7 +567,7 @@ func main() {
 		} else if command[0] == "cd" {
 			fmt.Print(Cd(command))
 		} else if command[0] == "history" {
-			fmt.Println(History())
+			fmt.Print(History())
 		} else if isExec(command) {
 			RunExec(command)
 		} else {
