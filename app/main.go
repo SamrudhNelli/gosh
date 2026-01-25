@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 	"sync"
+	"strconv"
 
 	"github.com/chzyer/readline"
 )
@@ -184,25 +185,46 @@ func Cd(command []string) string {
 	return ""
 }
 
-func History() string {
-	homeDir, err := os.UserHomeDir()
+func getHistoryPath() string {
+    home, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Print("Error accessing home directory! : ")
 		log.Fatal(err)
 	}
-	historyPath := homeDir + "/.gosh_history"
+    filePath := home + "/.gosh_history"
+	if envPath := os.Getenv("HISTFILE"); envPath != "" {
+        f, _ := os.Create(filePath)
+		f.Close()
+    }
+	return filePath
+}
+
+func History(command []string) string {
+    home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Print("Error accessing home directory! : ")
+		log.Fatal(err)
+	}
+    historyPath := home + "/.gosh_history"
 	content, err := os.ReadFile(historyPath)
 	if err != nil {
 		return ""
 	}
 	lines := strings.Split(string(content), "\n")
 	var output strings.Builder
+	var maxLimit int = len(lines)
 
-	for i, line := range lines {
-		if line == "" {
+	if len(command) > 1 {
+		if val ,err := strconv.Atoi(command[1]); err == nil {
+			maxLimit = val
+		}
+	}
+
+	for i := max(0, len(lines) - maxLimit - 1); i < len(lines); i++ {
+		if lines[i] == "" {
 			continue
 		}
-		fmt.Fprintf(&output, "%d  %s\n", i+1, line)
+		fmt.Fprintf(&output, "%5d  %s\n", i+1, lines[i])
 	}
 	return output.String()
 }
@@ -455,7 +477,7 @@ func builtinInPipe(command []string, out *os.File) {
 	case "pwd" : cmdOutput = Pwd()
 	case "cd" : cmdOutput = Cd(command)
 	case "type" : cmdOutput = Type(command)
-	case "history" : cmdOutput = History()
+	case "history" : cmdOutput = History(command)
 	default : log.Fatal("Internal builtin code broken!")
 	}
 
@@ -511,8 +533,7 @@ func Welcome() {
 
 func main() {
 
-	home, _ := os.UserHomeDir()
-	historyPath := home + "/.gosh_history"
+	historyPath := getHistoryPath()
 	completer := readline.NewPrefixCompleter(initCompleters()...)
 	customCompleter := &bellCompleter{
 		AutoCompleter: completer,
@@ -567,7 +588,7 @@ func main() {
 		} else if command[0] == "cd" {
 			fmt.Print(Cd(command))
 		} else if command[0] == "history" {
-			fmt.Print(History())
+			fmt.Print(History(command))
 		} else if isExec(command) {
 			RunExec(command)
 		} else {
