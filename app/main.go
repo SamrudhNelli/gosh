@@ -189,7 +189,6 @@ func Cd(command []string) string {
 	return ""
 }
 
-var once bool = false
 func getHistoryPath() string {
     home, err := os.UserHomeDir()
 	if err != nil {
@@ -198,12 +197,7 @@ func getHistoryPath() string {
 	}
     filePath := home + "/.gosh_history"
 	if envPath := os.Getenv("HISTFILE"); envPath != "" {
-		if !once {
-			f, _ := os.Create(filePath)
-			f.Close()
-			once = true
-		}
-		return filePath
+		return envPath
     }
 	return filePath
 }
