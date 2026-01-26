@@ -645,19 +645,24 @@ func hasPipelines(command []string) bool {
 }
 
 func Welcome() {
-	cyan := "\033[36m"
-    white := "\033[97m"
-    reset := "\033[0m"
+// 1. Define your palette
+    // 1. Define the Tropical Palette
+    red    := "\033[31m"
+    yellow := "\033[33m"
+    green  := "\033[32m"
+    cyan   := "\033[36m"
+    blue   := "\033[34m"
+    reset  := "\033[0m"
 
-    fmt.Println(cyan + "\n                  .oooooo.      .oooooo.            oooo")
-    fmt.Println("                 d8P'  `Y8b    d8P'  `Y8b           `888")
-    fmt.Println("                888           888      888  .oooo.o  888 .oo.")
-    fmt.Println("                888           888      888 d88(  \"8  888P\"Y88b")
-    fmt.Println("                888     ooooo 888      888 `\"Y88b.   888   888")
-    fmt.Println("                `88.    .88'  `88b    d88' o.  )88b  888   888")
-    fmt.Println("                 `Y8bood8P'    `Y8bood8P'  8\"\"888P' o888o o888o" + reset)
-    
-    fmt.Println(white + "\n                           v1.0 (The Go Shell)\n" + reset)
+    fmt.Println()
+    fmt.Println(red +    "        .oooooo.      .oooooo.            oooo")
+    fmt.Println(yellow +    "       d8P'  `Y8b    d8P'  `Y8b           `888")
+    fmt.Println(yellow + "      888           888      888  .oooo.o  888 .oo.")
+    fmt.Println(green + "      888           888      888 d88(  \"8  888P\"Y88b")
+    fmt.Println(green +  "      888     ooooo 888      888 `\"Y88b.   888   888")
+    fmt.Println(cyan +  "      `88.    .88'  `88b    d88' o.  )88b  888   888")
+    fmt.Println(cyan +   "       `Y8bood8P'    `Y8bood8P'  8\"\"888P' o888o o888o" + reset)
+    fmt.Println(blue +   "\n                    v1.0 (The Go Shell)\n" + reset)
     fmt.Println()
 }
 
@@ -669,10 +674,10 @@ func main() {
 		AutoCompleter: completer,
 	}
 
-	// Welcome()
+	Welcome()
 
 	rl, err := readline.NewEx(&readline.Config{
-		Prompt:            "$ ",
+		Prompt:            "\033[36m\u276f \033[0m",
 		AutoComplete:      customCompleter,
 		InterruptPrompt:   "^C",
 		EOFPrompt:         "exit",
@@ -730,6 +735,8 @@ func main() {
 			fmt.Print(Cd(command))
 		} else if command[0] == "history" {
 			fmt.Print(History(command))
+		} else if command[0] == "welcome" {
+			Welcome()
 		} else if isExec(command) {
 			RunExec(command)
 		} else {
