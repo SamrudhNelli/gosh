@@ -503,6 +503,15 @@ func commandParser(rawCommand string) (command []string) {
 		if insideWord {
 			if rawCommand[i] == startingQuote {
 				insideWord = false
+			} else if startingQuote == '"' && rawCommand[i] == '\\' {
+				if i + 1 < len(rawCommand) {
+					if rawCommand[i + 1] == '"' || rawCommand[i + 1] == '\\' || rawCommand[i + 1] == '`' || rawCommand[i + 1] == '$' {
+						temp += string(rawCommand[i + 1])
+						i++
+						continue
+					}
+				}
+				temp += string(rawCommand[i])
 			} else {
 				temp += string(rawCommand[i])
 			}
@@ -511,6 +520,11 @@ func commandParser(rawCommand string) (command []string) {
 			case '\'', '"':
 				startingQuote = rawCommand[i]
 				insideWord = true
+			case '\\':
+				if i + 1 < len(rawCommand) {
+					temp += string(rawCommand[i + 1])
+					i++
+				}
 			case ' ', '\n', '\t', '\r', '\f', '\v':
 				if temp != "" {
 					command = append(command, temp)
