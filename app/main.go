@@ -25,6 +25,9 @@ var builtin = map[string]bool{
 	"history" : true,
 }
 
+var currHistory = make([]string, 0, 500)
+var currHistoryInit int = 1
+
 type bellCompleter struct {
 	readline.AutoCompleter
 	lastTabTime    time.Time
@@ -205,21 +208,26 @@ func getHistoryPath() string {
 	return filePath
 }
 
-func appendToHistory(rawCommand string) {
-	if rawCommand[len(rawCommand) - 1] != '\n' {
-		rawCommand += "\n"
-	}
+func saveToHistory() {
 	historyPath := getHistoryPath()
-	data := []byte(rawCommand)
 	file, err := os.OpenFile(historyPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return
 	}
 	defer file.Close()
-	_, err = file.Write(data)
-	if err != nil {
-		file.Close()
+	for _, val := range currHistory {
+		val += "\n"
+		data := []byte(val)
+		_, err = file.Write(data)
+		if err != nil {
+			file.Close()
+			return
+		}
 	}
+}
+
+func appendToCurrHistory(rawCommand string) {
+	currHistory = append(currHistory, rawCommand)
 }
 
 func History(command []string) string {
@@ -244,15 +252,11 @@ func History(command []string) string {
 		if err != nil {
 			return ""
 		}
-		data := []byte(content)
-		file, err := os.OpenFile(getHistoryPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return ""
-		}
-		defer file.Close()
-		_, err = file.Write(data)
-		if err != nil {
-			file.Close()
+		lines := strings.Split(string(content), "\n")
+		for _, line := range lines {
+			if line != "" {
+				currHistory = append(currHistory, line)
+			}
 		}
 		return ""
 	}
@@ -267,27 +271,81 @@ func history(command []string) string {
 	}
 	lines := strings.Split(string(content), "\n")
 	var output strings.Builder
-	var maxLimit int = len(lines)
+	var maxLimit int = len(lines) + len(currHistory)
 
 	if len(command) > 1 {
 		if val ,err := strconv.Atoi(command[1]); err == nil {
 			maxLimit = val
 		} else if command[1] == "-w" || command[1] == "-a" {
 			return editHistoryFile(command)
-		}
+		} 
 	}
 
-	for i := max(0, len(lines) - maxLimit - 1); i < len(lines); i++ {
-		if lines[i] == "" {
-			continue
+	if len(currHistory) < maxLimit {
+		for i := max(0, len(lines) + len(currHistory) - maxLimit - 1); i < len(lines); i++ {
+			if lines[i] != "" {
+				fmt.Fprintf(&output, "%5d  %s\n", i+1, lines[i])
+			}
 		}
-		fmt.Fprintf(&output, "%5d  %s\n", i+1, lines[i])
+	}
+	for i := max(0, len(currHistory) - maxLimit); i < len(currHistory); i++ {
+		if currHistory[i] != "" {
+			fmt.Fprintf(&output, "%5d  %s\n", currHistoryInit + i, currHistory[i])
+		}
 	}
 	return output.String()
 }
 
 func editHistoryFile(command []string) string {
-	_ = len(command)
+	if len(command) < 3 {
+		return ""
+	}
+
+	if strings.HasPrefix(command[2], "~") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		if command[2] == "~" {
+			command[2] = home
+		} else if strings.HasPrefix(command[2], "~/") {
+			command[2] = filepath.Join(home, command[2][2:])
+		}
+	}
+	absPath, err := filepath.Abs(command[2])
+	if err != nil {
+		return ""
+	}
+	command[2] = string(absPath)
+
+	if command[1] == "-w" {
+		file, err := os.OpenFile(command[2], os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		if err != nil {
+			return ""
+		}
+		defer file.Close()
+		for _, line := range currHistory {
+			if line != "" {
+				if _, err := file.WriteString(line + "\n"); err != nil {
+					return ""
+				}
+			}
+		}
+	} else {
+		file, err := os.OpenFile(command[2], os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return ""
+		}
+		defer file.Close()
+		for _, line := range currHistory {
+			if _, err := file.WriteString(line + "\n"); err != nil {
+				return ""
+			}
+		}
+		currHistoryInit = currHistoryInit + len(currHistory)
+		saveToHistory()
+		currHistory = make([]string, 0, 500)
+	}
 	return ""
 }
 
@@ -621,10 +679,12 @@ func main() {
         lines := strings.Split(string(content), "\n")
         for _, line := range lines {
             if line != "" {
+				currHistoryInit++
                 rl.SaveHistory(line)
             }
         }
     }
+	defer saveToHistory()
 
 	for {
 
@@ -646,7 +706,7 @@ func main() {
 		if len(command) == 0 {
 			continue
 		}
-		appendToHistory(rawCommand)
+		appendToCurrHistory(rawCommand)
 
 		if command[0] == "exit" {
 			break
