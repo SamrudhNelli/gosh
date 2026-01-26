@@ -11,6 +11,7 @@ import (
 	"time"
 	"sync"
 	"strconv"
+	"path/filepath"
 
 	"github.com/chzyer/readline"
 )
@@ -185,6 +186,7 @@ func Cd(command []string) string {
 	return ""
 }
 
+var once bool = false
 func getHistoryPath() string {
     home, err := os.UserHomeDir()
 	if err != nil {
@@ -193,20 +195,73 @@ func getHistoryPath() string {
 	}
     filePath := home + "/.gosh_history"
 	if envPath := os.Getenv("HISTFILE"); envPath != "" {
-        f, _ := os.Create(filePath)
-		f.Close()
+		if !once {
+			f, _ := os.Create(filePath)
+			f.Close()
+			once = true
+		}
+		return filePath
     }
 	return filePath
 }
 
-func History(command []string) string {
-    home, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Print("Error accessing home directory! : ")
-		log.Fatal(err)
+func appendToHistory(rawCommand string) {
+	if rawCommand[len(rawCommand) - 1] != '\n' {
+		rawCommand += "\n"
 	}
-    historyPath := home + "/.gosh_history"
-	content, err := os.ReadFile(historyPath)
+	historyPath := getHistoryPath()
+	data := []byte(rawCommand)
+	file, err := os.OpenFile(historyPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	_, err = file.Write(data)
+	if err != nil {
+		file.Close()
+	}
+}
+
+func History(command []string) string {
+	if len(command) > 2 && command[1] == "-r" {
+		if strings.HasPrefix(command[2], "~") {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return ""
+			}
+			if command[2] == "~" {
+				command[2] = home
+			} else if strings.HasPrefix(command[2], "~/") {
+				command[2] = filepath.Join(home, command[2][2:])
+			}
+    	}
+		absPath, err := filepath.Abs(command[2])
+		if err != nil {
+			return ""
+		}
+		command[2] = string(absPath)
+		content, err := os.ReadFile(command[2])
+		if err != nil {
+			return ""
+		}
+		data := []byte(content)
+		file, err := os.OpenFile(getHistoryPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return ""
+		}
+		defer file.Close()
+		_, err = file.Write(data)
+		if err != nil {
+			file.Close()
+		}
+		return ""
+	}
+	return history(command)
+}
+
+func history(command []string) string {
+
+	content, err := os.ReadFile(getHistoryPath())
 	if err != nil {
 		return ""
 	}
@@ -217,6 +272,8 @@ func History(command []string) string {
 	if len(command) > 1 {
 		if val ,err := strconv.Atoi(command[1]); err == nil {
 			maxLimit = val
+		} else if command[1] == "-w" || command[1] == "-a" {
+			return editHistoryFile(command)
 		}
 	}
 
@@ -227,6 +284,11 @@ func History(command []string) string {
 		fmt.Fprintf(&output, "%5d  %s\n", i+1, lines[i])
 	}
 	return output.String()
+}
+
+func editHistoryFile(command []string) string {
+	_ = len(command)
+	return ""
 }
 
 func findExec(program string) (bool, string) {
@@ -338,20 +400,21 @@ func redirectEchoToFile(command []string, index int, print string, flag int) str
 		return ""
 	}
 
-	if flag == 1 {
+	switch flag {
+	case 1:
 		data := []byte(print + strings.Join(command[min(index+2, len(command)):], " "))
 		err := os.WriteFile(command[index+1], data, 0644)
 		if err != nil {
 			log.Fatal(err)
 		}
-	} else if flag == 2 {
+	case 2:
 		data := []byte("")
 		err := os.WriteFile(command[index+1], data, 0644)
 		if err != nil {
 			log.Fatal(err)
 		}
 		return print
-	} else if flag == 3 {
+	case 3:
 		data := []byte(print + strings.Join(command[min(index+2, len(command)):], " "))
 		file, err := os.OpenFile(command[index+1], os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
@@ -363,7 +426,7 @@ func redirectEchoToFile(command []string, index int, print string, flag int) str
 			file.Close()
 			log.Fatal(err)
 		}
-	} else if flag == 4 {
+	case 4:
 		data := []byte("")
 		file, err := os.OpenFile(command[index+1], os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
@@ -392,15 +455,16 @@ func commandParser(rawCommand string) (command []string) {
 				temp += string(rawCommand[i])
 			}
 		} else {
-			if rawCommand[i] == '\'' || rawCommand[i] == '"' {
+			switch rawCommand[i] {
+			case '\'', '"':
 				startingQuote = rawCommand[i]
 				insideWord = true
-			} else if rawCommand[i] == ' ' || rawCommand[i] == '\n' || rawCommand[i] == '\t' || rawCommand[i] == '\r' || rawCommand[i] == '\f' || rawCommand[i] == '\v' {
+			case ' ', '\n', '\t', '\r', '\f', '\v':
 				if temp != "" {
 					command = append(command, temp)
 					temp = ""
 				}
-			} else {
+			default:
 				temp += string(rawCommand[i])
 			}
 		}
@@ -543,7 +607,6 @@ func main() {
 
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:            "$ ",
-		HistoryFile:       historyPath,
 		AutoComplete:      customCompleter,
 		InterruptPrompt:   "^C",
 		EOFPrompt:         "exit",
@@ -553,6 +616,15 @@ func main() {
 		log.Fatal(err)
 	}
 	defer rl.Close()
+
+	if content, err := os.ReadFile(historyPath); err == nil {
+        lines := strings.Split(string(content), "\n")
+        for _, line := range lines {
+            if line != "" {
+                rl.SaveHistory(line)
+            }
+        }
+    }
 
 	for {
 
@@ -574,6 +646,7 @@ func main() {
 		if len(command) == 0 {
 			continue
 		}
+		appendToHistory(rawCommand)
 
 		if command[0] == "exit" {
 			break
