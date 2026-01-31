@@ -541,6 +541,12 @@ func commandParser(rawCommand string) (command []string) {
 	return
 }
 
+func checkForEnvs(command *[]string) {
+	for idx, val := range *command {
+		(*command)[idx] = os.ExpandEnv(val)
+	}
+}
+
 func ExecutePipes(command []string) {
 	commands := splitPipes(command)
 	var cmds []*exec.Cmd
@@ -720,6 +726,7 @@ func main() {
 			continue
 		}
 		appendToCurrHistory(rawCommand)
+		checkForEnvs(&command)
 
 		if command[0] == "exit" {
 			break
